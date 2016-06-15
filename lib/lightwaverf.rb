@@ -26,6 +26,7 @@ class LightWaveRF
   @config = nil
   @timers = nil
   @time = nil
+  @newhost = 'true'
 
   def quote name = ''
     name = '"' + name + '"' if name.include? ' '
@@ -336,20 +337,25 @@ class LightWaveRF
   # Arguments:
   #   email: (String)
   #   pin: (String)
+  #   hostname: (String)
   #   debug: (Boolean)
   #
   # Credits:
   #   wonko - http://lightwaverfcommunity.org.uk/forums/topic/querying-configuration-information-from-the-lightwaverf-website/
-  def update_config email = nil, pin = nil, debug = false
+  def update_config email = nil, pin = nil, hostname = 'https://manager.lightwaverf.com/process/login.php' , debug = false
 
     if ! email && ! pin
       STDERR.puts 'missing email and / or pin'
-      STDERR.puts 'usage: lightwaverf update email@email.com 1111'
+      STDERR.puts 'usage: lightwaverf update <email address> <password/PIN> <hostname>'
+      STDERR.puts 'for old manager, usage: lightwaverf update email@email.com 1111 https://lightwaverfhost.co.uk/manager/index.php'
+      STDERR.puts 'for new manager, usage: lightwaverf update email@email.com Abcd1234 https://manager.lightwaverf.com/process/login.php'
+      STDERR.puts 'for any manager, usage: lightwaverf update email@email.com Abcd1234 whatever.host.com'
       return
     end
 
     # Login to LightWaveRF Host server
-    uri = URI.parse 'https://lightwaverfhost.co.uk/manager/index.php'
+    #uri = URI.parse 'https://lightwaverfhost.co.uk/manager/index.php'
+    uri = URI.parse hostname
     http = Net::HTTP.new uri.host, uri.port
     http.use_ssl = true if uri.scheme == 'https'
 
@@ -421,17 +427,32 @@ class LightWaveRF
   def get_variables_from body = '', debug = nil
     # debug and ( p '[Info - LightWaveRF Gem] body was ' + body.to_s )
     variables = { }
-    # Extract JavaScript variables from the page
-    #   var gDeviceNames = [""]
-    #   var gDeviceStatus = [""]
-    #   var gRoomNames = [""]
-    #   var gRoomStatus = [""]
-    # http://rubular.com/r/UH0H4b4afF
-    body.scan( /var (gDeviceNames|gDeviceStatus|gRoomNames|gRoomStatus)\s*=\s*([^;]*)/ ).each do | variable |
-      debug and ( p variable.to_s )
-      if variable[0]
-        variables[variable[0]] = variable[1].scan( /"([^"]*)\"/ ).map! do | v | v.pop end
-        debug and ( p 'variables[' + variable[0] + '] = ' + variables[variable[0]].to_s )
+    roomids = { }
+    if @newhost.eql? 'true'
+      # Extract rooms from the home page
+      #   var room_id = [""]
+      # http://rubular.com/r/UH0H4b4afF
+      body.scan( /var (room_id)\s*=\s*([^;]*)/ ).each do | roomid |
+        debug and ( p roomid.to_s )
+        if roomid[0]
+          roomids[roomid[0]] = roomid[1].scan( /"([^"]*)\"/ ).map! do | v | v.pop end
+          debug and ( p 'roomids[' + roomid[0] + '] = ' + roomids[roomid[0]].to_s )
+        end
+      end
+      debug and ( p '[Info - LightWaveRF Gem] so roomids are ' + roomids.inspect )
+    else
+      # Extract JavaScript variables from the page
+      #   var gDeviceNames = [""]
+      #   var gDeviceStatus = [""]
+      #   var gRoomNames = [""]
+      #   var gRoomStatus = [""]
+      # http://rubular.com/r/UH0H4b4afF
+      body.scan( /var (gDeviceNames|gDeviceStatus|gRoomNames|gRoomStatus)\s*=\s*([^;]*)/ ).each do | variable |
+        debug and ( p variable.to_s )
+        if variable[0]
+          variables[variable[0]] = variable[1].scan( /"([^"]*)\"/ ).map! do | v | v.pop end
+          debug and ( p 'variables[' + variable[0] + '] = ' + variables[variable[0]].to_s )
+        end
       end
     end
     debug and ( p '[Info - LightWaveRF Gem] so variables are ' + variables.inspect )
